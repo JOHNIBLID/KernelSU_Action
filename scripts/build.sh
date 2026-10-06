@@ -113,10 +113,11 @@ make_args() {
 
 build_kernel() {
 	group "Building kernel"
-	export PATH="${CLANG_PATH:-}:${PATH}"
-	export KBUILD_BUILD_HOST=${KBUILD_BUILD_HOST:-Github-Action}
-	export KBUILD_BUILD_USER=${KBUILD_BUILD_USER:-kernelsu-action}
-
+    export PATH="${CLANG_PATH:-}:${PATH}"
+	export KBUILD_BUILD_HOST="abfarm"
+    export KBUILD_BUILD_USER="android-build"
+    export KBUILD_BUILD_TIMESTAMP="Wed Nov 26 11:16:14 UTC 2025"
+	
 	unset DISABLE_LTO
 
 	# Custom manager signature, when the user builds their own manager APK.
