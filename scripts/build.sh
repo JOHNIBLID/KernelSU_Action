@@ -12,7 +12,7 @@ set -euo pipefail
 KERNEL_DIR=${KERNEL_DIR:?KERNEL_DIR must be set}
 WORKSPACE=${WORKSPACE:-$(cd "${KERNEL_DIR}/.." && pwd)}
 ARCH=${ARCH:-arm64}
-OUT="${KERNEL_DIR}/out"
+OUT="${KERNEL_DIR}"
 
 DEFCONFIG_PATH="${KERNEL_DIR}/arch/${ARCH}/configs/${KERNEL_CONFIG}"
 
@@ -100,7 +100,7 @@ prepare_defconfig() {
 # ----------------------------------------------------------------- build ---
 
 make_args() {
-	printf '%s' "O=out ARCH=${ARCH} KCFLAGS=-Wno-error"
+	printf '%s' "ARCH=${ARCH} KCFLAGS=-Wno-error"
 	[ -n "${CUSTOM_CMDS:-}" ] && printf ' %s' "$CUSTOM_CMDS"
 	[ -n "${EXTRA_CMDS:-}"  ] && printf ' %s' "$EXTRA_CMDS"
 	[ -n "${GCC_64:-}"      ] && printf ' %s' "$GCC_64"
@@ -147,6 +147,12 @@ build_kernel() {
 	# shellcheck disable=SC2086
 	make -j"$(nproc --all)" CC="$cc" $args \
 		|| die "kernel build failed"
+
+	# إنشاء رابط رمزي لضمان عثور باقي مراحل الأكشن على المخرجات
+	mkdir -p "${KERNEL_DIR}/out/arch/${ARCH}/boot"
+	if [ -f "${KERNEL_DIR}/arch/${ARCH}/boot/${KERNEL_IMAGE_NAME}" ]; then
+		cp "${KERNEL_DIR}/arch/${ARCH}/boot/${KERNEL_IMAGE_NAME}" "${KERNEL_DIR}/out/arch/${ARCH}/boot/" || true
+	fi
 
 	endgroup
 }
