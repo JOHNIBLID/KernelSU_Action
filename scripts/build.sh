@@ -100,7 +100,7 @@ prepare_defconfig() {
 # ----------------------------------------------------------------- build ---
 
 make_args() {
-	printf '%s' "O=out ARCH=${ARCH}"
+	printf '%s' "O=out ARCH=${ARCH} KCFLAGS=-Wno-error"
 	[ -n "${CUSTOM_CMDS:-}" ] && printf ' %s' "$CUSTOM_CMDS"
 	[ -n "${EXTRA_CMDS:-}"  ] && printf ' %s' "$EXTRA_CMDS"
 	[ -n "${GCC_64:-}"      ] && printf ' %s' "$GCC_64"
@@ -113,11 +113,14 @@ make_args() {
 
 build_kernel() {
 	group "Building kernel"
-    export PATH="${CLANG_PATH:-}:${PATH}"
+	export PATH="${CLANG_PATH:-}:${PATH}"
 	export KBUILD_BUILD_HOST="abfarm"
-    export KBUILD_BUILD_USER="android-build"
-    export KBUILD_BUILD_TIMESTAMP="Wed Nov 26 11:16:14 UTC 2025"
+	export KBUILD_BUILD_USER="android-build"
+	export KBUILD_BUILD_TIMESTAMP="Wed Nov 26 11:16:14 UTC 2025"
 	
+	# تعطيل تحذيرات Clang 22 الجديدة كلياً لتفادي توقف BPF و syscalls
+	export KCFLAGS="-Wno-error -Wno-default-const-init-var-unsafe"
+
 	unset DISABLE_LTO
 
 	# Custom manager signature, when the user builds their own manager APK.
