@@ -100,15 +100,11 @@ prepare_defconfig() {
 # ----------------------------------------------------------------- build ---
 
 make_args() {
-	printf '%s' "ARCH=${ARCH} KCFLAGS=-Wno-error"
+	printf '%s' "ARCH=${ARCH} LLVM=1 LLVM_IAS=1 OBJCOPY=llvm-objcopy KCFLAGS=-Wno-error"
 	[ -n "${CUSTOM_CMDS:-}" ] && printf ' %s' "$CUSTOM_CMDS"
 	[ -n "${EXTRA_CMDS:-}"  ] && printf ' %s' "$EXTRA_CMDS"
 	[ -n "${GCC_64:-}"      ] && printf ' %s' "$GCC_64"
 	[ -n "${GCC_32:-}"      ] && printf ' %s' "$GCC_32"
-	if is_true "${USE_LLVM:-false}"; then
-		printf ' LLVM=1 LLVM_IAS=1'
-		[ -n "${GCC_64:-}" ] || printf ' CROSS_COMPILE=aarch64-linux-gnu-'
-	fi
 }
 
 build_kernel() {
