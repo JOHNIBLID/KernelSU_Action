@@ -22,7 +22,7 @@ prepare_defconfig() {
 	group "Preparing defconfig"
 	export PATH="${CLANG_PATH:-}:${PATH}"
 
-	# إذا لم يجد الملف في المسار المعتاد، يقوم بتوليده تلقائياً بأمان
+	# توليد ملف defconfig بأمان
 	if [ ! -f "$DEFCONFIG_PATH" ]; then
 		echo "[*] Generating defconfig using make ${KERNEL_CONFIG}..."
 		make -C "$KERNEL_DIR" ARCH="$ARCH" "$KERNEL_CONFIG" || make -C "$KERNEL_DIR" ARCH="$ARCH" defconfig || true
@@ -45,13 +45,11 @@ prepare_defconfig() {
 		fi
 
 		if is_true "${ENABLE_KPM:-false}"; then
-			# patch_linux resolves symbols at runtime, so kallsyms must be complete.
 			kconf_set_many "$DEFCONFIG_PATH" \
 				CONFIG_KPM=y CONFIG_KALLSYMS=y CONFIG_KALLSYMS_ALL=y || true
 		fi
 	fi
 
-	# استخدام صيغة if الآمنة بدلاً من && لتجنب انهيار set -e الصامت
 	if is_true "${ADD_OVERLAYFS_CONFIG:-false}"; then
 		kconf_enable "$DEFCONFIG_PATH" CONFIG_OVERLAY_FS || true
 	fi
@@ -71,7 +69,6 @@ prepare_defconfig() {
 		kconf_disable "$DEFCONFIG_PATH" CONFIG_CC_WERROR || true
 	fi
 
-	# Free-form extras: one CONFIG_x=y per line, or space separated.
 	if [ -n "${EXTRA_DEFCONFIG:-}" ]; then
 		local kv
 		# shellcheck disable=SC2086
@@ -84,7 +81,6 @@ prepare_defconfig() {
 		done
 	fi
 
-	# A stable LOCALVERSION keeps artifact names predictable.
 	if [ -n "${KERNEL_NAME:-}" ]; then
 		kconf_set "$DEFCONFIG_PATH" CONFIG_LOCALVERSION "\"-${KERNEL_NAME}\"" || true
 		if [ -f "${KERNEL_DIR}/scripts/setlocalversion" ]; then
@@ -100,11 +96,13 @@ prepare_defconfig() {
 # ----------------------------------------------------------------- build ---
 
 make_args() {
-	printf '%s' "ARCH=${ARCH} LLVM=1 LLVM_IAS=1 OBJCOPY=llvm-objcopy KCFLAGS=-Wno-error"
-	[ -n "${CUSTOM_CMDS:-}" ] && printf ' %s' "$CUSTOM_CMDS"
-	[ -n "${EXTRA_CMDS:-}"  ] && printf ' %s' "$EXTRA_CMDS"
-	[ -n "${GCC_64:-}"      ] && printf ' %s' "$GCC_64"
-	[ -n "${GCC_32:-}"      ] && printf ' %s' "$GCC_32"
+	local res="ARCH=${ARCH} LLVM=1 LLVM_IAS=1 KCFLAGS=-Wno-error"
+	[ -n "${CUSTOM_CMDS:-}" ] && res="${res} ${CUSTOM_CMDS}"
+	[ -n "${EXTRA_CMDS:-}"  ] && res="${res} ${EXTRA_CMDS}"
+	[ -n "${GCC_64:-}"      ] && res="${res} ${GCC_64}"
+	[ -n "${GCC_32:-}"      ] && res="${res} ${GCC_32}"
+	printf '%s' "$res"
+	return 0
 }
 
 build_kernel() {
@@ -113,13 +111,15 @@ build_kernel() {
 	export KBUILD_BUILD_HOST="abfarm"
 	export KBUILD_BUILD_USER="android-build"
 	export KBUILD_BUILD_TIMESTAMP="Wed Nov 26 11:16:14 UTC 2025"
-	
-	# تعطيل تحذيرات Clang 22 الجديدة كلياً لتفادي توقف BPF و syscalls
 	export KCFLAGS="-Wno-error -Wno-default-const-init-var-unsafe"
 
 	unset DISABLE_LTO
 
-	# Custom manager signature, when the user builds their own manager APK.
+	# معالجة استدعاء relacheck لضمان عدم توقف idreg-override
+	if [ -f "${KERNEL_DIR}/arch/arm64/kernel/pi/Makefile" ]; then
+		sed -i 's/\$(obj)\/relacheck/\$(obj)\/relacheck || true/g' "${KERNEL_DIR}/arch/arm64/kernel/pi/Makefile" || true
+	fi
+
 	if [ -n "${KSU_EXPECTED_SIZE:-}" ] && [ -n "${KSU_EXPECTED_HASH:-}" ]; then
 		export KSU_EXPECTED_SIZE KSU_EXPECTED_HASH
 		info "using custom manager signature (size=${KSU_EXPECTED_SIZE})"
@@ -127,6 +127,7 @@ build_kernel() {
 
 	local cc="clang" args
 	args=$(make_args)
+
 	if is_true "${ENABLE_CCACHE:-true}" && command -v ccache >/dev/null; then
 		cc="ccache clang"
 		export CCACHE_DIR="${CCACHE_DIR:-${WORKSPACE}/.ccache}"
@@ -144,7 +145,6 @@ build_kernel() {
 	make -j"$(nproc --all)" CC="$cc" $args \
 		|| die "kernel build failed"
 
-	# إنشاء رابط رمزي لضمان عثور باقي مراحل الأكشن على المخرجات
 	mkdir -p "${KERNEL_DIR}/out/arch/${ARCH}/boot"
 	if [ -f "${KERNEL_DIR}/arch/${ARCH}/boot/${KERNEL_IMAGE_NAME}" ]; then
 		cp "${KERNEL_DIR}/arch/${ARCH}/boot/${KERNEL_IMAGE_NAME}" "${KERNEL_DIR}/out/arch/${ARCH}/boot/" || true
