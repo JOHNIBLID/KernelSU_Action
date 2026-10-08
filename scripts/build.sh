@@ -38,6 +38,7 @@ prepare_defconfig() {
 
 	if [ "${KSU_VARIANT:-none}" != "none" ]; then
 		kconf_enable "$DEFCONFIG_PATH" CONFIG_KSU || true
+		kconf_disable "$DEFCONFIG_PATH" CONFIG_KSU_SUSFS || true
 		ksu_hook_configs "${KSU_VARIANT}" "${KSU_HOOK_MODE:-auto}" "$DEFCONFIG_PATH" "$kver" || true
 
 		if is_true "${ENABLE_SUSFS:-false}"; then
