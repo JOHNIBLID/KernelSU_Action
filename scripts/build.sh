@@ -45,11 +45,13 @@ prepare_defconfig() {
 		fi
 
 		if is_true "${ENABLE_KPM:-false}"; then
+			# patch_linux resolves symbols at runtime, so kallsyms must be complete.
 			kconf_set_many "$DEFCONFIG_PATH" \
 				CONFIG_KPM=y CONFIG_KALLSYMS=y CONFIG_KALLSYMS_ALL=y || true
 		fi
 	fi
 
+	# استخدام صيغة if الآمنة بدلاً من && لتجنب انهيار set -e الصامت
 	if is_true "${ADD_OVERLAYFS_CONFIG:-false}"; then
 		kconf_enable "$DEFCONFIG_PATH" CONFIG_OVERLAY_FS || true
 	fi
@@ -69,6 +71,7 @@ prepare_defconfig() {
 		kconf_disable "$DEFCONFIG_PATH" CONFIG_CC_WERROR || true
 	fi
 
+	# Free-form extras: one CONFIG_x=y per line, or space separated.
 	if [ -n "${EXTRA_DEFCONFIG:-}" ]; then
 		local kv
 		# shellcheck disable=SC2086
@@ -81,6 +84,7 @@ prepare_defconfig() {
 		done
 	fi
 
+	# A stable LOCALVERSION keeps artifact names predictable.
 	if [ -n "${KERNEL_NAME:-}" ]; then
 		kconf_set "$DEFCONFIG_PATH" CONFIG_LOCALVERSION "\"-${KERNEL_NAME}\"" || true
 		if [ -f "${KERNEL_DIR}/scripts/setlocalversion" ]; then
@@ -111,6 +115,8 @@ build_kernel() {
 	export KBUILD_BUILD_HOST="abfarm"
 	export KBUILD_BUILD_USER="android-build"
 	export KBUILD_BUILD_TIMESTAMP="Wed Nov 26 11:16:14 UTC 2025"
+	
+	# تعطيل تحذيرات Clang 22 الجديدة كلياً لتفادي توقف BPF و syscalls
 	export KCFLAGS="-Wno-error -Wno-default-const-init-var-unsafe"
 
 	unset DISABLE_LTO
@@ -122,6 +128,11 @@ build_kernel() {
 	# تعديل السورس كود لبرنامج relacheck.c نفسه ليعود بنجاح 0 دائماً عند الترجمة
 	if [ -f "${KERNEL_DIR}/arch/arm64/kernel/pi/relacheck.c" ]; then
 		echo 'int main(int argc, char **argv) { return 0; }' > "${KERNEL_DIR}/arch/arm64/kernel/pi/relacheck.c"
+	fi
+
+	# تصحيح خطأ استدعاء binder_internal في كود rekernel ليتوافق مع معايير Clang الصارمة
+	if [ -d "${KERNEL_DIR}/drivers/rekernel" ]; then
+		find "${KERNEL_DIR}/drivers/rekernel" -type f -exec sed -i 's|<../android/binder_internal.h>|"../android/binder_internal.h"|g' {} + 2>/dev/null || true
 	fi
 
 	if [ -n "${KSU_EXPECTED_SIZE:-}" ] && [ -n "${KSU_EXPECTED_HASH:-}" ]; then
